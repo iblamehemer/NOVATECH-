@@ -1,0 +1,618 @@
+"""
+NovaTech AI — AI-Powered Branding Platform
+CRS AI Capstone 2025-26 | Scenario 1
+"""
+import streamlit as st
+import base64, os
+
+st.set_page_config(
+    page_title="NovaTech AI",
+    page_icon="✦",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+from utils.session import init_session
+from utils.gemini  import call_gemini_json, call_gemini
+init_session()
+
+# ── Load logo SVG ──────────────────────────────────────────────────────────────
+def _load_logo_b64():
+    p = os.path.join(os.path.dirname(__file__), "assets", "novatech-logo.svg")
+    if not os.path.exists(p):
+        return "", ""
+    with open(p) as f:
+        raw = f.read()
+    # White version (for dark bg)
+    white = (raw
+        .replace('fill="#1A1A1A"', 'fill="#F5F2EB"')
+        .replace("fill='#1A1A1A'", "fill='#F5F2EB'")
+        .replace('fill="#F9F9F7"/>', 'fill="#0A0A08"/>')
+        .replace('rect width="400" height="400" fill="#F9F9F7"',
+                 'rect width="400" height="400" fill="none"'))
+    b64_white = base64.b64encode(white.encode()).decode()
+    # Original (dark on light, for any light use)
+    b64_orig  = base64.b64encode(raw.encode()).decode()
+    return b64_white, b64_orig
+
+LOGO_B64_WHITE, LOGO_B64_ORIG = _load_logo_b64()
+LOGO_IMG_W = f'<img src="data:image/svg+xml;base64,{LOGO_B64_WHITE}" width="36" height="36" style="display:block">' if LOGO_B64_WHITE else ""
+LOGO_IMG_SM = f'<img src="data:image/svg+xml;base64,{LOGO_B64_WHITE}" width="22" height="22" style="display:block">' if LOGO_B64_WHITE else ""
+
+# Hero watermark — large faded logo
+LOGO_WATERMARK = f'<img src="data:image/svg+xml;base64,{LOGO_B64_WHITE}" style="width:580px;height:580px;opacity:0.035;pointer-events:none;display:block">' if LOGO_B64_WHITE else ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CSS
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap');
+
+:root {
+  --bg:    #090907;
+  --bg2:   #0e0e0c;
+  --bg3:   #141412;
+  --edge:  #1e1e1b;
+  --edge2: #282825;
+  --white: #F5F2EB;
+  --dim:   #C0BDB5;
+  --mute:  #6A6A62;
+  --faint: #333330;
+  --gold:  #C8A94A;
+  --serif: 'Playfair Display', Georgia, serif;
+  --sans:  'DM Sans', system-ui, sans-serif;
+  --mono:  'DM Mono', monospace;
+}
+
+/* ── Nuke ALL chrome ────────────────────────────────────────────── */
+#MainMenu, footer, header,
+[data-testid="stHeader"],
+[data-testid="stDecoration"],
+[data-testid="stToolbar"],
+[data-testid="stSidebar"] { display: none !important; }
+
+/* ── Page black ─────────────────────────────────────────────────── */
+html, body,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"], section.main {
+  background: var(--bg) !important;
+  color: var(--white) !important;
+  font-family: var(--sans) !important;
+  padding: 0 !important; margin: 0 !important;
+  max-width: 100% !important;
+}
+[data-testid="block-container"] {
+  padding: 0 !important; max-width: 100% !important;
+}
+[data-testid="stVerticalBlock"] > div { gap: 0 !important; }
+[data-testid="stHorizontalBlock"] { gap: 24px !important; align-items: start !important; }
+
+/* ── Remove ALL default Streamlit padding on elements ───────────── */
+[data-testid="stMarkdownContainer"] { margin: 0 !important; }
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+[data-testid="stButton"] > button {
+  background: transparent !important; color: var(--mute) !important;
+  border: 1px solid var(--edge2) !important; border-radius: 2px !important;
+  font-family: var(--mono) !important; font-size: 0.62rem !important;
+  letter-spacing: 0.1em !important; text-transform: uppercase !important;
+  padding: 0.55rem 1rem !important; transition: all 0.15s !important;
+}
+[data-testid="stButton"] > button:hover {
+  border-color: var(--dim) !important; color: var(--white) !important;
+  background: rgba(245,242,235,0.03) !important;
+}
+[data-testid="stButton"] > button[kind="primary"] {
+  background: var(--white) !important; color: var(--bg) !important;
+  border-color: var(--white) !important; font-weight: 500 !important;
+}
+[data-testid="stButton"] > button[kind="primary"]:hover {
+  background: var(--dim) !important;
+}
+
+/* ── Download ───────────────────────────────────────────────────── */
+[data-testid="stDownloadButton"] > button {
+  background: transparent !important; color: var(--gold) !important;
+  border: 1px solid rgba(200,169,74,0.28) !important; border-radius: 2px !important;
+  font-family: var(--mono) !important; font-size: 0.62rem !important;
+  letter-spacing: 0.1em !important; text-transform: uppercase !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+  background: rgba(200,169,74,0.06) !important; border-color: var(--gold) !important;
+}
+
+/* ── Inputs ─────────────────────────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {
+  background: var(--bg2) !important; border: 1px solid var(--edge2) !important;
+  border-radius: 2px !important; color: var(--white) !important;
+  font-family: var(--sans) !important; font-size: 0.88rem !important;
+  font-weight: 300 !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+  border-color: var(--dim) !important; box-shadow: none !important; outline: none !important;
+}
+[data-testid="stTextInput"] label, [data-testid="stTextArea"] label,
+[data-testid="stSelectbox"] label, [data-testid="stSlider"] label,
+[data-testid="stMultiSelect"] label {
+  color: var(--mute) !important; font-family: var(--mono) !important;
+  font-size: 0.56rem !important; letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+}
+[data-testid="stSelectbox"] > div > div {
+  background: var(--bg2) !important; border: 1px solid var(--edge2) !important;
+  border-radius: 2px !important; color: var(--white) !important;
+}
+[data-testid="stMultiSelect"] > div > div {
+  background: var(--bg2) !important; border: 1px solid var(--edge2) !important; border-radius: 2px !important;
+}
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
+  background: var(--bg3) !important; color: var(--gold) !important;
+  border: 1px solid var(--edge2) !important; font-family: var(--mono) !important;
+  font-size: 0.62rem !important; border-radius: 2px !important;
+}
+
+/* ── Slider ─────────────────────────────────────────────────────── */
+[data-testid="stSlider"] > div > div > div { background: var(--edge2) !important; }
+[data-testid="stSlider"] > div > div > div > div { background: var(--white) !important; }
+
+/* ── Metrics ────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+  background: var(--bg2) !important; border: 1px solid var(--edge) !important;
+  border-radius: 2px !important; padding: 1.4rem 1.6rem !important;
+}
+[data-testid="stMetricLabel"] {
+  color: var(--mute) !important; font-family: var(--mono) !important;
+  font-size: 0.56rem !important; letter-spacing: 0.14em !important; text-transform: uppercase !important;
+}
+[data-testid="stMetricValue"] {
+  color: var(--white) !important; font-family: var(--serif) !important;
+  font-size: 2rem !important; font-weight: 300 !important;
+}
+[data-testid="stMetricDelta"] { color: var(--mute) !important; font-size: 0.68rem !important; }
+
+/* ── Tables / Dataframes ────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+  border: 1px solid var(--edge) !important; border-radius: 2px !important;
+}
+
+/* ── Alerts ─────────────────────────────────────────────────────── */
+[data-testid="stAlert"] {
+  background: var(--bg2) !important; border-left: 2px solid var(--edge2) !important;
+  color: var(--mute) !important; font-size: 0.82rem !important; border-radius: 0 !important;
+}
+[data-testid="stSuccess"] { border-left-color: #4a7c5a !important; }
+[data-testid="stWarning"]  { border-left-color: var(--gold) !important; }
+
+/* ── Code ───────────────────────────────────────────────────────── */
+pre, [data-testid="stCode"] {
+  background: #060605 !important; border: 1px solid var(--edge) !important;
+  border-radius: 2px !important; font-family: var(--mono) !important;
+  font-size: 0.74rem !important;
+}
+code { color: var(--gold) !important; }
+
+/* ── Expander ───────────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+  background: transparent !important; border: 1px solid var(--edge) !important; border-radius: 0 !important;
+}
+[data-testid="stExpander"] summary {
+  font-family: var(--mono) !important; font-size: 0.6rem !important;
+  letter-spacing: 0.12em !important; text-transform: uppercase !important; color: var(--mute) !important;
+}
+
+/* ── Divider ────────────────────────────────────────────────────── */
+hr { border: none !important; border-top: 1px solid var(--edge) !important; margin: 0 !important; }
+
+/* ── Typography ─────────────────────────────────────────────────── */
+h1, h2, h3 {
+  font-family: var(--serif) !important; font-weight: 300 !important;
+  color: var(--white) !important;
+}
+p { color: var(--dim) !important; font-weight: 300 !important; line-height: 1.75 !important; }
+
+/* ── Form ───────────────────────────────────────────────────────── */
+[data-testid="stForm"] {
+  background: var(--bg2) !important; border: 1px solid var(--edge) !important;
+  border-radius: 2px !important; padding: 1.8rem !important;
+}
+[data-testid="stFormSubmitButton"] > button {
+  background: var(--white) !important; color: var(--bg) !important;
+  border: none !important; font-family: var(--mono) !important;
+  font-size: 0.62rem !important; letter-spacing: 0.12em !important;
+  text-transform: uppercase !important; padding: 0.7rem 2rem !important;
+  border-radius: 2px !important; width: 100% !important;
+}
+
+/* ── Chat ───────────────────────────────────────────────────────── */
+[data-testid="stChatMessage"] {
+  background: var(--bg2) !important; border: 1px solid var(--edge) !important; border-radius: 2px !important;
+}
+[data-testid="stChatInput"] textarea {
+  background: var(--bg2) !important; border: 1px solid var(--edge2) !important;
+  color: var(--white) !important; border-radius: 2px !important;
+}
+[data-testid="stImage"] img { border-radius: 2px !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STICKY NAV
+# ═══════════════════════════════════════════════════════════════════════════════
+company_name = st.session_state.get("company") or "NovaTech"
+st.markdown(f"""
+<div style="
+  position:sticky;top:0;z-index:9999;
+  background:rgba(9,9,7,0.95);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border-bottom:1px solid #1e1e1b;
+  padding:0 52px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+">
+  <a href="#" style="display:flex;align-items:center;gap:10px;text-decoration:none">
+    {LOGO_IMG_W}
+    <span style="font-family:'DM Mono',monospace;font-size:0.62rem;
+      letter-spacing:0.22em;color:#F5F2EB;text-transform:uppercase">{company_name}</span>
+  </a>
+  <div style="display:flex;align-items:center;gap:2rem">
+    <a href="#configure" style="font-family:'DM Mono',monospace;font-size:0.55rem;letter-spacing:0.12em;color:#6A6A62;text-decoration:none;text-transform:uppercase">Configure</a>
+    <a href="#logo"      style="font-family:'DM Mono',monospace;font-size:0.55rem;letter-spacing:0.12em;color:#6A6A62;text-decoration:none;text-transform:uppercase">Logo &amp; Font</a>
+    <a href="#slogans"   style="font-family:'DM Mono',monospace;font-size:0.55rem;letter-spacing:0.12em;color:#6A6A62;text-decoration:none;text-transform:uppercase">Slogans</a>
+    <a href="#colour"    style="font-family:'DM Mono',monospace;font-size:0.55rem;letter-spacing:0.12em;color:#6A6A62;text-decoration:none;text-transform:uppercase">Colour</a>
+    <a href="#campaign"  style="font-family:'DM Mono',monospace;font-size:0.55rem;letter-spacing:0.12em;color:#6A6A62;text-decoration:none;text-transform:uppercase">Campaign</a>
+    <a href="#kit"       style="font-family:'DM Mono',monospace;font-size:0.55rem;letter-spacing:0.12em;
+      color:#F5F2EB;text-decoration:none;text-transform:uppercase;
+      border:1px solid #282825;padding:0.4rem 1rem;border-radius:2px">
+      Brand Kit ↓
+    </a>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HERO — cinematic, full-bleed with gradient bleed + large logo watermark
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div id="hero" style="
+  position:relative;
+  min-height:100vh;
+  background:
+    radial-gradient(ellipse 80% 60% at 65% 40%, rgba(200,169,74,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 70% at 20% 80%, rgba(245,242,235,0.03) 0%, transparent 50%),
+    #09090700;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:0 52px 88px;
+  overflow:hidden;
+">
+  <!-- Noise grain texture -->
+  <svg style="position:absolute;inset:0;width:100%;height:100%;opacity:0.022;pointer-events:none" xmlns='http://www.w3.org/2000/svg'>
+    <filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter>
+    <rect width='100%' height='100%' filter='url(#g)'/>
+  </svg>
+
+  <!-- Logo watermark centred -->
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);pointer-events:none">
+    {LOGO_WATERMARK}
+  </div>
+
+  <!-- Fine horizontal rule across mid-section -->
+  <div style="position:absolute;top:50%;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(245,242,235,0.04),transparent);pointer-events:none"></div>
+
+  <!-- Eyebrow -->
+  <div style="font-family:'DM Mono',monospace;font-size:0.55rem;
+    letter-spacing:0.2em;color:#6A6A62;text-transform:uppercase;margin-bottom:28px">
+    ✦ &nbsp; CRS AI Capstone 2025–26 · Scenario 1
+  </div>
+
+  <!-- Main headline — very large, Waabi scale -->
+  <div style="font-family:'Playfair Display',Georgia,serif;
+    font-size:clamp(4.5rem,9.5vw,9.5rem);font-weight:300;
+    color:#F5F2EB;line-height:0.95;letter-spacing:-0.03em;
+    margin-bottom:40px;max-width:1100px">
+    Build your brand<br>
+    with <em style="color:#C8A94A;font-style:italic">intelligence</em>.
+  </div>
+
+  <!-- Sub + stats row -->
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;max-width:1100px">
+    <p style="font-size:0.95rem;font-weight:300;color:#6A6A62;
+      max-width:400px;line-height:1.75;margin:0">
+      CNN · KNN · KMeans · Random Forest · Gemini API.<br>
+      From identity to launch, in one platform.
+    </p>
+    <!-- Stat row -->
+    <div style="display:flex;gap:48px;align-items:flex-end">
+      <div style="text-align:right">
+        <div style="font-family:'Playfair Display',serif;font-size:2.8rem;
+          font-weight:300;color:#F5F2EB;line-height:1">9+</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.5rem;
+          letter-spacing:0.14em;color:#3A3A36;text-transform:uppercase;margin-top:4px">AI Models</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'Playfair Display',serif;font-size:2.8rem;
+          font-weight:300;color:#F5F2EB;line-height:1">5</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.5rem;
+          letter-spacing:0.14em;color:#3A3A36;text-transform:uppercase;margin-top:4px">Datasets</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'Playfair Display',serif;font-size:2.8rem;
+          font-weight:300;color:#F5F2EB;line-height:1">10+</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.5rem;
+          letter-spacing:0.14em;color:#3A3A36;text-transform:uppercase;margin-top:4px">Languages</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scroll indicator -->
+  <div style="position:absolute;bottom:36px;right:52px;
+    font-family:'DM Mono',monospace;font-size:0.48rem;
+    letter-spacing:0.18em;color:#282825;text-transform:uppercase;
+    writing-mode:vertical-rl">Scroll to explore</div>
+
+  <!-- Bottom fade into platform strip -->
+  <div style="position:absolute;bottom:0;left:0;right:0;height:120px;
+    background:linear-gradient(to bottom,transparent,#09090700 40%,#111110);
+    pointer-events:none"></div>
+</div>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLATFORM STRIP
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div style="background:#111110;border-top:1px solid #1e1e1b;border-bottom:1px solid #1e1e1b">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);max-width:100%">
+    <div style="padding:32px 28px;border-right:1px solid #1e1e1b">
+      <div style="font-family:'DM Mono',monospace;font-size:0.48rem;letter-spacing:0.14em;color:#282825;text-transform:uppercase;margin-bottom:8px">Week 02–03</div>
+      <div style="font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:300;color:#F5F2EB;margin-bottom:4px">Logo &amp; Typography</div>
+      <div style="font-size:0.73rem;color:#282825;font-weight:300">CNN · KNN font engine</div>
+    </div>
+    <div style="padding:32px 28px;border-right:1px solid #1e1e1b">
+      <div style="font-family:'DM Mono',monospace;font-size:0.48rem;letter-spacing:0.14em;color:#282825;text-transform:uppercase;margin-bottom:8px">Week 04</div>
+      <div style="font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:300;color:#F5F2EB;margin-bottom:4px">Slogans &amp; Copy</div>
+      <div style="font-size:0.73rem;color:#282825;font-weight:300">Gemini API · NLTK</div>
+    </div>
+    <div style="padding:32px 28px;border-right:1px solid #1e1e1b">
+      <div style="font-family:'DM Mono',monospace;font-size:0.48rem;letter-spacing:0.14em;color:#282825;text-transform:uppercase;margin-bottom:8px">Week 05–06</div>
+      <div style="font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:300;color:#F5F2EB;margin-bottom:4px">Colour &amp; Animation</div>
+      <div style="font-size:0.73rem;color:#282825;font-weight:300">KMeans · GIF storyboard</div>
+    </div>
+    <div style="padding:32px 28px;border-right:1px solid #1e1e1b">
+      <div style="font-family:'DM Mono',monospace;font-size:0.48rem;letter-spacing:0.14em;color:#282825;text-transform:uppercase;margin-bottom:8px">Week 07–08</div>
+      <div style="font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:300;color:#F5F2EB;margin-bottom:4px">Campaign &amp; Global</div>
+      <div style="font-size:0.73rem;color:#282825;font-weight:300">Random Forest · 10+ langs</div>
+    </div>
+    <div style="padding:32px 28px">
+      <div style="font-family:'DM Mono',monospace;font-size:0.48rem;letter-spacing:0.14em;color:#282825;text-transform:uppercase;margin-bottom:8px">Week 10</div>
+      <div style="font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:300;color:#F5F2EB;margin-bottom:4px">Brand Kit</div>
+      <div style="font-size:0.73rem;color:#282825;font-weight:300">ZIP export · Cloud deploy</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+def sec(anchor, step, headline, sub="", bg="var(--bg)"):
+    st.markdown(f"""
+<div id="{anchor}" style="background:{bg};border-top:1px solid #1e1e1b;padding:88px 52px 64px">
+  <div style="max-width:1100px;margin:0 auto">
+    <div style="font-family:'DM Mono',monospace;font-size:0.52rem;letter-spacing:0.18em;
+      color:#282825;text-transform:uppercase;margin-bottom:16px">{step}</div>
+    <div style="font-family:'Playfair Display',Georgia,serif;
+      font-size:clamp(2.2rem,3.8vw,3.6rem);font-weight:300;
+      color:#F5F2EB;letter-spacing:-0.02em;line-height:1.05;margin-bottom:16px">{headline}</div>
+    {'<div style="font-size:0.9rem;color:#6A6A62;font-weight:300;max-width:500px;line-height:1.75;margin-bottom:52px">'+sub+'</div>' if sub else '<div style="height:40px"></div>'}
+  </div>
+  <div style="max-width:1100px;margin:0 auto">
+""", unsafe_allow_html=True)
+
+def sec_end():
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+def fl(text):
+    """Field label"""
+    st.markdown(f"""<div style="font-family:'DM Mono',monospace;font-size:0.56rem;
+      letter-spacing:0.14em;text-transform:uppercase;color:#6A6A62;
+      margin-bottom:4px;margin-top:20px">{text}</div>""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURE
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("configure","Step 01 · Foundation",
+    "Configure your brand.",
+    "Set your company name, industry, tone, and audience. Everything NovaTech generates is tailored to these inputs.")
+
+INDUSTRIES = ["Technology","Finance","Healthcare","Retail","Education",
+              "Food & Beverage","Real Estate","Fashion","Travel","Sustainability"]
+TONES = ["Minimalist","Bold","Luxury","Playful","Professional","Innovative","Trustworthy","Creative"]
+
+col1, col2 = st.columns([1,1], gap="large")
+with col1:
+    fl("Company Name")
+    company = st.text_input("co", value=st.session_state.get("company","NovaTech"),
+                             placeholder="e.g. NovaTech", label_visibility="collapsed")
+    st.session_state.company = company
+
+    fl("Target Audience")
+    audience = st.text_input("aud", value=st.session_state.get("audience",""),
+                              placeholder="e.g. B2B SaaS founders 28–45", label_visibility="collapsed")
+    st.session_state.audience = audience
+
+    fl("Target Region")
+    region = st.text_input("reg", value=st.session_state.get("region",""),
+                            placeholder="e.g. India, Europe, Global", label_visibility="collapsed")
+    st.session_state.region = region
+
+with col2:
+    fl("Product / Service Description")
+    desc = st.text_area("dsc", value=st.session_state.get("description",""),
+                         placeholder="Describe what your brand does…",
+                         height=164, label_visibility="collapsed")
+    st.session_state.description = desc
+
+st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
+fl("Industry")
+ind_cols = st.columns(5, gap="small")
+for i, ind in enumerate(INDUSTRIES):
+    with ind_cols[i % 5]:
+        active = st.session_state.get("industry") == ind
+        if st.button(ind, key=f"ind_{ind}", use_container_width=True,
+                     type="primary" if active else "secondary"):
+            st.session_state.industry = ind; st.rerun()
+
+st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+fl("Brand Tone")
+tone_cols = st.columns(4, gap="small")
+for i, tone in enumerate(TONES):
+    with tone_cols[i % 4]:
+        active = st.session_state.get("tone") == tone
+        if st.button(tone, key=f"tn_{tone}", use_container_width=True,
+                     type="primary" if active else "secondary"):
+            st.session_state.tone = tone; st.rerun()
+
+if st.session_state.get("company") and st.session_state.get("industry") and st.session_state.get("tone"):
+    st.markdown(f"""
+<div style="margin-top:36px;padding:20px 24px;background:var(--bg2);
+  border:1px solid #1e1e1b;display:flex;align-items:center;gap:14px">
+  <div style="width:5px;height:5px;background:#F5F2EB;border-radius:50%;flex-shrink:0"></div>
+  <div>
+    <div style="font-family:'Playfair Display',serif;font-size:1rem;font-weight:300;color:#F5F2EB">
+      {st.session_state.company} is configured.</div>
+    <div style="font-family:'DM Mono',monospace;font-size:0.52rem;color:#3A3A36;
+      letter-spacing:0.1em;margin-top:3px">
+      {st.session_state.get("industry","—")} · {st.session_state.get("tone","—")} · {st.session_state.get("region","Global")}
+    </div>
+  </div>
+  <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:0.52rem;color:#3A3A36;letter-spacing:0.1em">Scroll ↓</div>
+</div>""", unsafe_allow_html=True)
+
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOGO & FONT
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("logo","Step 02–03 · Identity",
+    "Logo studio &amp; typography.",
+    "CNN-powered classification with PCA clusters. KNN font pairing trained on 2,400 samples.",
+    bg="#0e0e0c")
+from modules.week2_logo import render_logo
+from modules.week3_font import render_font
+render_logo()
+st.markdown("<div style='height:52px'></div>", unsafe_allow_html=True)
+render_font()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SLOGANS
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("slogans","Step 04 · Voice",
+    "Slogans &amp; taglines.",
+    "Gemini API generation with NLTK preprocessing pipeline. Export TXT + JSON.")
+from modules.week4_slogan import render_slogan
+render_slogan()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COLOUR
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("colour","Step 05 · Palette",
+    "Colour palette engine.",
+    "KMeans pixel extraction from logo datasets. Industry-mapped colour psychology.",
+    bg="#0e0e0c")
+from modules.week5_colour import render_colour
+render_colour()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ANIMATION
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("animation","Step 06 · Motion",
+    "Animation studio.",
+    "Matplotlib FuncAnimation storyboards. One-click GIF export.")
+from modules.week6_animation import render_animation
+render_animation()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CAMPAIGN + MULTILINGUAL
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("campaign","Step 07–08 · Reach",
+    "Campaign analytics &amp; global copy.",
+    "Trained Random Forest + GBM predict CTR, ROI, engagement. Gemini API translates to 10+ languages.",
+    bg="#0e0e0c")
+from modules.week7_campaign  import render_campaign
+from modules.week8_multilang import render_multilang
+render_campaign()
+st.markdown("<div style='height:56px'></div>", unsafe_allow_html=True)
+render_multilang()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FEEDBACK
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("feedback","Step 09 · Refinement",
+    "Feedback &amp; model tuning.",
+    "VADER sentiment on ratings. Radar chart. Model refinement plan.")
+from modules.week9_feedback import render_feedback
+render_feedback()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BRAND KIT
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("kit","Step 10 · Export",
+    "Your brand kit.",
+    "Logo, fonts, palette, slogans, campaign copy — everything in one ZIP ready for deployment.",
+    bg="#0e0e0c")
+from modules.week10_kit import render_kit
+render_kit()
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI CHAT
+# ═══════════════════════════════════════════════════════════════════════════════
+sec("chat","Optional · AI Assistant",
+    "Ask NovaTech AI.",
+    "Gemini-powered brand strategy assistant with full context.")
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [{"role":"assistant",
+        "content":"Hi — I'm the NovaTech AI assistant. Ask me anything about your brand, the AI models, or strategy."}]
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+if user_input := st.chat_input("Ask NovaTech AI…"):
+    st.session_state.chat_history.append({"role":"user","content":user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+    with st.chat_message("assistant"):
+        with st.spinner(""):
+            ctx = f"Brand: {st.session_state.get('company','NovaTech')}, Industry: {st.session_state.get('industry','—')}, Tone: {st.session_state.get('tone','—')}."
+            reply = call_gemini(user_input,
+                system=f"You are NovaTech AI, an expert branding assistant. Context: {ctx} Be concise and authoritative.",
+                temperature=0.7, max_tokens=400)
+            st.markdown(reply)
+            st.session_state.chat_history.append({"role":"assistant","content":reply})
+sec_end()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FOOTER
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div style="background:#060605;border-top:1px solid #1e1e1b;
+  padding:44px 52px;display:flex;align-items:center;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:10px">
+    {LOGO_IMG_SM}
+    <span style="font-family:'DM Mono',monospace;font-size:0.52rem;
+      letter-spacing:0.2em;color:#282825;text-transform:uppercase">NovaTech AI</span>
+  </div>
+  <span style="font-family:'DM Mono',monospace;font-size:0.48rem;
+    letter-spacing:0.1em;color:#1e1e1b;text-transform:uppercase">CRS AI Capstone 2025–26 · Scenario 1</span>
+  <span style="font-family:'DM Mono',monospace;font-size:0.48rem;
+    letter-spacing:0.1em;color:#1e1e1b">Streamlit · Gemini API · scikit-learn</span>
+</div>
+""", unsafe_allow_html=True)
